@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { 
   Card,
   CardContent,
@@ -6,25 +6,68 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MapIncident } from "@/lib/types";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix for default marker icons in react-leaflet
+const DefaultIcon = L.icon({
+  iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+});
+
+L.Marker.prototype.options.icon = DefaultIcon;
+
+// Custom marker icons for different severity levels
+const createSeverityIcon = (color: string) => {
+  return L.divIcon({
+    className: "custom-div-icon",
+    html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+};
 
 interface LocationMapProps {
   incidents: MapIncident[];
 }
 
-export default function LocationMap({ incidents }: LocationMapProps) {
-  const mapContainerRef = useRef<HTMLDivElement>(null);
+// Default center coordinates for the map
+const defaultCenter: [number, number] = [34.0522, -118.2437]; // Los Angeles coordinates
+
+// Component to recenter map based on incidents
+function MapController({ incidents }: { incidents: MapIncident[] }) {
+  const map = useMap();
   
-  // This would initialize the map library in a real implementation
   useEffect(() => {
-    // Map initialization would go here with leaflet or another mapping library
-    const initMap = () => {
-      if (mapContainerRef.current) {
-        console.log("Map would be initialized here");
-        // Integration with a map library would happen here
-      }
-    };
-    
-    initMap();
+    if (incidents.length > 0) {
+      // Create bounds that include all incidents
+      const bounds = L.latLngBounds([]);
+      incidents.forEach(incident => {
+        // Convert percentage to actual lat/lng (simplified conversion for demo)
+        // In a real app, you would have actual lat/lng coordinates
+        const lat = 34.0522 + (incident.y / 100 - 0.5) * 0.1;
+        const lng = -118.2437 + (incident.x / 100 - 0.5) * 0.1;
+        bounds.extend([lat, lng] as L.LatLngExpression);
+      });
+      
+      // Fit map to bounds with some padding
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }, [incidents, map]);
+  
+  return null;
+}
+
+export default function LocationMap({ incidents }: LocationMapProps) {
+  const [mapReady, setMapReady] = useState(false);
+
+  useEffect(() => {
+    // Set map as ready after component mounts
+    setMapReady(true);
   }, []);
 
   // Count incidents by severity
@@ -39,35 +82,64 @@ export default function LocationMap({ incidents }: LocationMapProps) {
       </CardHeader>
       <CardContent className="p-4">
         <div 
-          ref={mapContainerRef}
-          className="relative h-60 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden mb-4"
-          style={{ aspectRatio: "16/9" }}
+          className="relative rounded overflow-hidden mb-4"
+          style={{ height: "240px", width: "100%" }}
         >
-          {/* Map would be rendered here by the mapping library */}
-          <div className="absolute inset-0 flex items-center justify-center text-gray-500 dark:text-gray-400">
-            Interactive map would be rendered here
-          </div>
-          
-          {/* Sample incident markers - these would be placed by the mapping library in reality */}
-          {incidents.map((incident) => (
-            <div 
-              key={incident.id}
-              className={`absolute w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-white text-xs`}
-              style={{
-                top: `${incident.y}%`,
-                left: `${incident.x}%`,
-                backgroundColor: incident.severity === "high" 
-                  ? "var(--destructive)" 
-                  : incident.severity === "medium" 
-                    ? "#F59E0B" 
-                    : "#10B981",
-                transform: "translate(-50%, -50%)"
-              }}
-              title={`${incident.location}: ${incident.type}`}
+          {mapReady && (
+            <MapContainer 
+              center={defaultCenter} 
+              zoom={12} 
+              style={{ height: "100%", width: "100%" }}
             >
-              {incident.cameraId}
-            </div>
-          ))}
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              
+              {incidents.map((incident) => {
+                // Convert percentage to actual lat/lng (simplified conversion for demo)
+                const lat = 34.0522 + (incident.y / 100 - 0.5) * 0.1;
+                const lng = -118.2437 + (incident.x / 100 - 0.5) * 0.1;
+                const position: [number, number] = [lat, lng];
+                
+                // Choose icon based on severity
+                let icon;
+                if (incident.severity === "high") {
+                  icon = createSeverityIcon("var(--destructive, #ef4444)");
+                } else if (incident.severity === "medium") {
+                  icon = createSeverityIcon("#F59E0B");
+                } else {
+                  icon = createSeverityIcon("#10B981");
+                }
+                
+                return (
+                  <Marker 
+                    key={incident.id} 
+                    position={position} 
+                    icon={icon}
+                  >
+                    <Popup>
+                      <div className="p-1">
+                        <p className="font-semibold">{incident.location}</p>
+                        <p className="text-sm">Type: {incident.type}</p>
+                        <p className="text-sm capitalize">
+                          Severity: <span className={
+                            incident.severity === "high" 
+                              ? "text-red-500" 
+                              : incident.severity === "medium" 
+                                ? "text-amber-500" 
+                                : "text-green-500"
+                          }>{incident.severity}</span>
+                        </p>
+                        <p className="text-sm">Camera ID: {incident.cameraId}</p>
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
+              
+              <MapController incidents={incidents} />
+            </MapContainer>
+          )}
         </div>
         
         <div className="mt-4 space-y-2">
