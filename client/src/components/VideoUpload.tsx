@@ -112,12 +112,43 @@ export default function VideoUpload() {
   };
   
   // Handle testing a video with the AI model
-  const handleTestVideo = (videoPath: string) => {
-    // In a real implementation, this would send a request to process the video with the AI model
+  const processVideoMutation = useMutation({
+    mutationFn: async (filename: string) => {
+      const response = await fetch(`/api/process-video/${filename}`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to process video');
+      }
+      
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Processing Complete",
+        description: `Video processed successfully. ${data.incidentsDetected ? `${data.incidentsDetected} incidents detected.` : 'No incidents detected.'}`,
+      });
+      // Invalidate relevant queries after processing is complete
+      queryClient.invalidateQueries({ queryKey: ['/api/incidents'] });
+    },
+    onError: (error) => {
+      console.error('Error processing video:', error);
+      toast({
+        title: "Processing Failed",
+        description: "There was an error processing your video. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  const handleTestVideo = (filename: string) => {
     toast({
       title: "Processing Video",
-      description: "The video is being processed by the accident detection model.",
+      description: "The video is being processed by the accident detection model. This may take a moment.",
     });
+    
+    processVideoMutation.mutate(filename);
   };
   
   return (
@@ -188,9 +219,10 @@ export default function VideoUpload() {
                     <Button
                       variant="default"
                       size="sm"
-                      onClick={() => handleTestVideo(video.path)}
+                      onClick={() => handleTestVideo(video.filename)}
+                      disabled={processVideoMutation.isPending}
                     >
-                      Test with AI
+                      {processVideoMutation.isPending ? "Processing..." : "Test with AI"}
                     </Button>
                   </div>
                 </div>

@@ -10,7 +10,7 @@ class YOLOv8Simulator:
     Since we can't install the actual ultralytics package, this simulates its behavior.
     """
     
-    def __init__(self, model_path: str = None):
+    def __init__(self, model_path: str = ""):
         """
         Initialize a simulated YOLOv8 model
         
@@ -147,7 +147,7 @@ class YOLOv8Simulator:
         return annotated
 
 # Function to simulate YOLO model loading
-def load_model(model_path=None):
+def load_model(model_path: str = ""):
     """
     Simulate loading a YOLOv8 model
     

@@ -361,6 +361,35 @@ def uploaded_file(filename):
 def processed_file(filename):
     return send_from_directory(PROCESSED_FOLDER, filename)
 
+@app.route('/api/process-video/<filename>', methods=['POST'])
+def process_video_endpoint(filename):
+    """Endpoint to process a specific uploaded video with AI detection"""
+    video_path = os.path.join(UPLOAD_FOLDER, filename)
+    
+    # Check if file exists
+    if not os.path.isfile(video_path):
+        return jsonify({"error": f"Video file {filename} not found"}), 404
+    
+    # Get camera ID from request or use default
+    camera_id = request.json.get('cameraId', 'cam1') if request.json else 'cam1'
+    
+    # Get the number of incidents before processing
+    incidents_before = len(incidents)
+    
+    # Process the video in a blocking manner for this endpoint
+    # (this is okay for the user-initiated processing, but would be bad for streaming)
+    process_video(video_path, camera_id)
+    
+    # Calculate how many new incidents were detected
+    incidents_after = len(incidents)
+    incidents_detected = incidents_after - incidents_before
+    
+    return jsonify({
+        "message": f"Video {filename} processed successfully",
+        "incidentsDetected": incidents_detected,
+        "camera": cameras[camera_id]
+    })
+
 # Start the background thread for system stats updates
 stats_thread = threading.Thread(target=system_stats_updater, daemon=True)
 stats_thread.start()

@@ -52,43 +52,61 @@ function startPythonBackend() {
   // Make sure to stop any existing process first
   if (pythonBackend) {
     console.log("Stopping existing Python backend process");
-    pythonBackend.kill();
+    pythonBackend.kill('SIGKILL');  // Force kill to ensure port is released
     pythonBackend = null;
     backendReady = false;
+
+    // Wait a bit to ensure port is released
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        startPythonProcess().then(resolve);
+      }, 1000);
+    });
+  } else {
+    return startPythonProcess();
   }
-  
-  // Start the Python process
-  pythonBackend = spawn("python", ["backend/run.py"]);
-  
-  // Set up event listeners for the Python process
-  pythonBackend.stdout.on("data", (data) => {
-    console.log(`Python backend: ${data}`);
-    // Check if the backend is ready
-    if (data.toString().includes("Running on")) {
-      backendReady = true;
-      console.log("Python backend is ready");
-    }
-  });
-  
-  pythonBackend.stderr.on("data", (data) => {
-    console.error(`Python backend error: ${data}`);
-  });
-  
-  pythonBackend.on("close", (code) => {
-    console.log(`Python backend process exited with code ${code}`);
-    pythonBackend = null;
-    backendReady = false;
-  });
-  
-  // Wait a bit for the Python backend to start
-  return new Promise<void>((resolve) => {
-    setTimeout(() => {
-      if (!backendReady) {
-        console.log("Python backend not ready yet, but continuing anyway");
+}
+
+// Helper function to start the Python process
+function startPythonProcess() {
+  // Check if port 5001 is already in use
+  try {
+    // Start the Python process
+    pythonBackend = spawn("python", ["backend/run.py"]);
+    
+    // Set up event listeners for the Python process
+    pythonBackend.stdout.on("data", (data) => {
+      console.log(`Python backend: ${data}`);
+      // Check if the backend is ready
+      if (data.toString().includes("Running on")) {
+        backendReady = true;
+        console.log("Python backend is ready");
       }
-      resolve();
-    }, 3000);
-  });
+    });
+    
+    pythonBackend.stderr.on("data", (data) => {
+      console.error(`Python backend error: ${data}`);
+    });
+    
+    pythonBackend.on("close", (code) => {
+      console.log(`Python backend process exited with code ${code}`);
+      pythonBackend = null;
+      backendReady = false;
+    });
+    
+    // Wait a bit for the Python backend to start
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        if (!backendReady) {
+          console.log("Python backend not ready yet, but continuing anyway");
+        }
+        resolve();
+      }, 3000);
+    });
+  } catch (error) {
+    console.error("Failed to start Python backend:", error);
+    return Promise.resolve();
+  }
 }
 
 // Proxy middleware to forward requests to the Python backend
@@ -425,7 +443,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   httpServer.on("close", () => {
     if (pythonBackend) {
       console.log("Shutting down Python backend...");
-      pythonBackend.kill();
+      pythonBackend.kill('SIGKILL');  // Force kill to ensure port is released
       pythonBackend = null;
       backendReady = false;
     }
