@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertIncidentSchema, insertCameraSchema, insertUserSchema, insertNotificationSchema } from "@shared/schema";
@@ -8,6 +8,12 @@ import { fromZodError } from "zod-validation-error";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { spawn, ChildProcessWithoutNullStreams } from "child_process";
+import * as http from "http";
+
+// Variable to store the Python backend process
+let pythonBackend: ChildProcessWithoutNullStreams | null = null;
+let backendReady = false;
 
 // Set up storage for uploaded videos
 const videoStorage = multer.diskStorage({
@@ -39,7 +45,140 @@ const uploadVideo = multer({
   },
 });
 
+// Function to start the Python backend
+function startPythonBackend() {
+  console.log("Starting Python backend...");
+  
+  // Make sure to stop any existing process first
+  if (pythonBackend) {
+    console.log("Stopping existing Python backend process");
+    pythonBackend.kill();
+    pythonBackend = null;
+    backendReady = false;
+  }
+  
+  // Start the Python process
+  pythonBackend = spawn("python", ["backend/run.py"]);
+  
+  // Set up event listeners for the Python process
+  pythonBackend.stdout.on("data", (data) => {
+    console.log(`Python backend: ${data}`);
+    // Check if the backend is ready
+    if (data.toString().includes("Running on")) {
+      backendReady = true;
+      console.log("Python backend is ready");
+    }
+  });
+  
+  pythonBackend.stderr.on("data", (data) => {
+    console.error(`Python backend error: ${data}`);
+  });
+  
+  pythonBackend.on("close", (code) => {
+    console.log(`Python backend process exited with code ${code}`);
+    pythonBackend = null;
+    backendReady = false;
+  });
+  
+  // Wait a bit for the Python backend to start
+  return new Promise<void>((resolve) => {
+    setTimeout(() => {
+      if (!backendReady) {
+        console.log("Python backend not ready yet, but continuing anyway");
+      }
+      resolve();
+    }, 3000);
+  });
+}
+
+// Proxy middleware to forward requests to the Python backend
+function createProxyMiddleware(req: Request, res: Response, next: NextFunction) {
+  // Only proxy specific API endpoints to the Python backend
+  const pythonRoutes = [
+    '/api/status',
+    '/api/system-stats',
+    '/api/cameras',
+    '/api/incidents',
+    '/api/upload',
+    '/api/videos',
+    '/uploads/',
+    '/processed/'
+  ];
+  
+  const shouldProxy = pythonRoutes.some(route => 
+    req.path.startsWith(route) || 
+    (req.path.includes('/cameras/') && req.path.includes('/api')) ||
+    (req.path.includes('/incidents/') && req.path.includes('/api'))
+  );
+  
+  if (!shouldProxy) {
+    return next();
+  }
+  
+  // Make sure the backend is running
+  if (!pythonBackend || !backendReady) {
+    console.log("Python backend not running, starting it...");
+    startPythonBackend().then(() => {
+      // Rerun this middleware after starting the backend
+      createProxyMiddleware(req, res, next);
+    });
+    return;
+  }
+  
+  // Forward the request to the Python backend
+  const options = {
+    hostname: 'localhost',
+    port: 5001,
+    path: req.url,
+    method: req.method,
+    headers: req.headers
+  };
+  
+  const proxyReq = http.request(options, (proxyRes) => {
+    res.status(proxyRes.statusCode || 500);
+    
+    // Copy headers from Python response
+    for (const [key, value] of Object.entries(proxyRes.headers)) {
+      if (value) res.setHeader(key, value);
+    }
+    
+    // Stream the response data
+    proxyRes.pipe(res);
+  });
+  
+  proxyReq.on('error', (error) => {
+    console.error("Proxy error:", error);
+    if (!res.headersSent) {
+      res.status(502).json({ 
+        error: "Python backend error", 
+        message: error.message 
+      });
+    }
+  });
+  
+  // If there's request data, forward it
+  if (req.body) {
+    const bodyData = JSON.stringify(req.body);
+    proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+    proxyReq.write(bodyData);
+  }
+  
+  // Forward any form data for file uploads
+  if (req.file) {
+    // This would need a more complex implementation for file uploads
+    // For now, we're handling uploads directly in Express
+  }
+  
+  proxyReq.end();
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Start the Python backend
+  await startPythonBackend();
+  
+  // Add the proxy middleware
+  app.use(createProxyMiddleware);
+  
   // API routes for accident detection system
   const apiRouter = app.route("/api");
 
@@ -281,5 +420,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  
+  // Clean up Python process on server shutdown
+  httpServer.on("close", () => {
+    if (pythonBackend) {
+      console.log("Shutting down Python backend...");
+      pythonBackend.kill();
+      pythonBackend = null;
+      backendReady = false;
+    }
+  });
+  
   return httpServer;
 }
