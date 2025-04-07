@@ -33,6 +33,7 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
+import VideoUpload from "@/components/VideoUpload";
 
 export default function Settings() {
   const [confidenceThreshold, setConfidenceThreshold] = useState(75);
@@ -53,6 +54,7 @@ export default function Settings() {
           <TabsTrigger value="cameras">Camera Management</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>
           <TabsTrigger value="backup">Backup & Storage</TabsTrigger>
+          <TabsTrigger value="test">Test Videos</TabsTrigger>
         </TabsList>
         
         <TabsContent value="detection">
@@ -488,6 +490,10 @@ export default function Settings() {
               <Button>Save Storage Settings</Button>
             </CardFooter>
           </Card>
+        </TabsContent>
+        
+        <TabsContent value="test">
+          <VideoUpload />
         </TabsContent>
       </Tabs>
     </div>
