@@ -1,11 +1,14 @@
-import { neon, neonConfig } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
-import * as schema from "@shared/schema";
+// server/db.ts
 
-// Use connection pooling for serverless environments
-neonConfig.fetchConnectionCache = true;
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import Database from 'better-sqlite3';
+import * as schema from '../shared/schema';
 
-// Get the database URL from environment variables
-const sql = neon(process.env.DATABASE_URL || "");
+// Initialize SQLite database
+const sqlite = new Database('sqlite.db');
 
-export const db = drizzle(sql, { schema });
+// Create the Drizzle ORM instance with your schema
+export const db = drizzle(sqlite, { schema });
+
+// Migrations should be run manually using CLI:
+// npx drizzle-kit push

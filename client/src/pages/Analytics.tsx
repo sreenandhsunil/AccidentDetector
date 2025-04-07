@@ -18,7 +18,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { Calendar, BarChart3, LineChart, PieChart } from "lucide-react";
+import { Calendar, BarChart3, LineChart, PieChart, Eye, Download } from "lucide-react";
 import { incidentStats } from "@/lib/dummyData";
 
 export default function Analytics() {

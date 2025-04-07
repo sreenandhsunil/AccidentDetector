@@ -394,6 +394,14 @@ def process_video_endpoint(filename):
 stats_thread = threading.Thread(target=system_stats_updater, daemon=True)
 stats_thread.start()
 
+@app.route('/')
+def home():
+    return 'Accident Detection Backend is running!'
+@app.route("/health")
+def health():
+    return "OK", 200
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=True)
