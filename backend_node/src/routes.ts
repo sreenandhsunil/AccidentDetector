@@ -18,7 +18,7 @@ let backendReady = false;
 // Set up storage for uploaded videos
 const videoStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "data/uploads/videos");
+    cb(null, "uploads/videos");
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -72,7 +72,7 @@ function startPythonProcess() {
   // Check if port 5001 is already in use
   try {
     // Start the Python process
-    pythonBackend = spawn("python", ["backend_python/run.py"]);
+    pythonBackend = spawn("python", ["backend/run.py"]);
     
     // Set up event listeners for the Python process
     pythonBackend.stdout.on("data", (data) => {
@@ -119,9 +119,8 @@ function createProxyMiddleware(req: Request, res: Response, next: NextFunction) 
     '/api/incidents',
     '/api/upload',
     '/api/videos',
-    '/api/process-video',
-    '/data/uploads/videos/',
-    '/data/processed/videos/'
+    '/uploads/',
+    '/processed/'
   ];
   
   const shouldProxy = pythonRoutes.some(route => 
@@ -375,7 +374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get list of uploaded videos
   app.get("/api/videos", async (req, res) => {
     try {
-      const videosDir = "data/uploads/videos";
+      const videosDir = "uploads/videos";
       fs.readdir(videosDir, (err, files) => {
         if (err) {
           console.error("Error reading videos directory:", err);
@@ -398,7 +397,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Serve video files
   app.get("/api/videos/:filename", (req, res) => {
     const filename = req.params.filename;
-    const videoPath = path.join("data/uploads/videos", filename);
+    const videoPath = path.join("uploads/videos", filename);
 
     // Check if file exists
     fs.access(videoPath, fs.constants.F_OK, (err) => {
